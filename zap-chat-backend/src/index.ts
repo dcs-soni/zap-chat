@@ -13,8 +13,6 @@ wss.on("connection", (socket) => {
   //console.log("user connected #" + userCount);
 
   socket.on("message", (message) => {
-    // @ts-ignore
-
     let parsedMessage;
 
     try {
