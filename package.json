@@ -1,0 +1,17 @@
+{
+  "name": "16.2-websocket-project-zapchat",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsc -b && node ./dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.3",
+    "ws": "^8.18.0"
+  }
+}
