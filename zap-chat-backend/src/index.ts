@@ -5,9 +5,30 @@ const wss = new WebSocketServer({ port: 8080 });
 interface User {
   socket: WebSocket;
   room: string;
+  isTyping: boolean;
 }
 
 let allSockets: User[] = [];
+
+function broadcastTypingStatus(room: string, excludeSocket?: WebSocket) {
+  const typingUsers = allSockets.filter(
+    (user) =>
+      user.room === room && user.isTyping && user.socket !== excludeSocket
+  ).length;
+
+  const typingMessage = {
+    type: "typing_status",
+    payload: {
+      count: typingUsers,
+    },
+  };
+
+  allSockets.forEach((user) => {
+    if (user.room === room && user.socket !== excludeSocket) {
+      user.socket.send(JSON.stringify(typingMessage));
+    }
+  });
+}
 
 wss.on("connection", (socket) => {
   //console.log("user connected #" + userCount);
@@ -47,11 +68,33 @@ wss.on("connection", (socket) => {
       }
       if (!existingUser) {
         console.log("User joined room " + parsedMessage.payload.roomId);
-        allSockets.push({ socket, room: parsedMessage.payload.roomId });
+        allSockets.push({
+          socket,
+          room: parsedMessage.payload.roomId,
+          isTyping: false,
+        });
       } else {
         existingUser.room = parsedMessage.payload.roomId;
         console.log("User switched room " + parsedMessage.payload.roomId);
       }
+    }
+
+    if (parsedMessage.type === "typing_status") {
+      const currentUser = allSockets.find((x) => x.socket === socket);
+
+      if (!currentUser) {
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            message: "You should join a room first",
+          })
+        );
+        return;
+      }
+
+      const isTyping = parsedMessage.payload.isTyping;
+      currentUser.isTyping = isTyping;
+      broadcastTypingStatus(currentUser.room, socket);
     }
 
     if (parsedMessage.type == "chat") {
@@ -79,6 +122,9 @@ wss.on("connection", (socket) => {
         return;
       }
 
+      currentUser.isTyping = false;
+      broadcastTypingStatus(currentUser.room);
+
       console.log(`User in room ${currentUser.room} wants to chat`);
 
       const currentUserRoom = currentUser.room;
@@ -92,7 +138,12 @@ wss.on("connection", (socket) => {
 
   // If any socket dies, remove it from the sockets array
   socket.on("close", () => {
-    allSockets = allSockets.filter((x) => x.socket !== socket);
-    console.log("Socket disconnected, removed from room");
+    const disconnectedUser = allSockets.find((x) => x.socket === socket);
+    if (disconnectedUser) {
+      const room = disconnectedUser.room;
+      allSockets = allSockets.filter((x) => x.socket !== socket);
+      broadcastTypingStatus(room); // Update typing status for remaining users
+      console.log("Socket disconnected, removed from room");
+    }
   });
 });
