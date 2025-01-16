@@ -3,9 +3,11 @@ import "./App.css";
 
 function App() {
   const [messages, setMessages] = useState(["hi there"]);
+  const [typingCount, setTypingCount] = useState(0);
+  const typingTimeoutRef = useRef(null);
 
-  const wssRef = useRef();
-  const inputRef = useRef();
+  const wssRef = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     const wss = new WebSocket("ws://localhost:8080");
@@ -22,7 +24,23 @@ function App() {
     };
 
     wss.onmessage = (event) => {
-      setMessages((initialMessages) => [...initialMessages, event.data]);
+      try {
+        const data = JSON.parse(event.data);
+        console.log(data);
+
+        if (data.type === "typing_status") {
+          console.log("Update stattus received", data.payload);
+          setTypingCount(data.payload.count);
+        } else if (data.type === "chat") {
+          setMessages((initialMessages) => [
+            ...initialMessages,
+            data.payload.message,
+          ]);
+        }
+      } catch (e) {
+        console.error("Error: ", e);
+        console.error("Invalid message format:", event.data);
+      }
     };
 
     wssRef.current = wss;
@@ -33,7 +51,41 @@ function App() {
     };
   }, []);
 
+  const sendTypingStatus = (isTyping: boolean) => {
+    if (wssRef.current?.readyState === WebSocket.OPEN) {
+      wssRef.current.send(
+        JSON.stringify({
+          type: "typing_status",
+          payload: { isTyping },
+        })
+      );
+    }
+  };
+
+  const debounce = (fn, delay) => {
+    let timer;
+
+    return (...args) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => fn(...args, delay));
+    };
+  };
+
+  const handleTyping = debounce(() => {
+    sendTypingStatus(true);
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      sendTypingStatus(false);
+    }, 1500);
+  }, 300);
+
   const sendMessage = () => {
+    sendTypingStatus(false);
+
     const message = inputRef.current?.value;
     if (message && wssRef.current?.readyState === WebSocket.OPEN) {
       wssRef.current.send(
@@ -43,11 +95,16 @@ function App() {
         })
       );
       inputRef.current.value = ""; // Clears the input after sending the msg
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
     }
   };
 
   const handleKeyEvent = (event) => {
     if (event.key == "Enter") {
+      // event.preventDefault();
       sendMessage();
     }
   };
@@ -74,11 +131,21 @@ function App() {
         </div>
       </div>
 
+      {/* Typing status */}
+
+      <div className="h-[5vh] flex justify-center items-center text-sm text-gray-300  italic">
+        {typingCount > 0 &&
+          (typingCount === 1
+            ? "Someone is typing..."
+            : `${typingCount} people are typing...`)}
+      </div>
+
       {/* Input Area */}
       <div className="h-[20vh] flex justify-center items-center">
         <div className="w-[50vw] flex space-x-3">
           <input
             onKeyDown={handleKeyEvent}
+            onKeyUp={handleTyping}
             ref={inputRef}
             type="text"
             placeholder="Type your message..."

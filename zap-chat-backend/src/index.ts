@@ -41,7 +41,7 @@ wss.on("connection", (socket) => {
     } catch (error) {
       console.error("Invalid JSON received", message);
       socket.send(
-        JSON.stringify({ type: error, message: "Invalid JSON format" })
+        JSON.stringify({ type: "error", message: "Invalid JSON format" })
       );
       return;
     }
@@ -76,6 +76,7 @@ wss.on("connection", (socket) => {
       } else {
         existingUser.room = parsedMessage.payload.roomId;
         console.log("User switched room " + parsedMessage.payload.roomId);
+        existingUser.isTyping = false;
       }
     }
 
@@ -130,7 +131,12 @@ wss.on("connection", (socket) => {
       const currentUserRoom = currentUser.room;
       allSockets.forEach((user) => {
         if (user.room === currentUserRoom) {
-          user.socket.send(parsedMessage.payload.message);
+          user.socket.send(
+            JSON.stringify({
+              type: "chat",
+              payload: { message: parsedMessage.payload.message },
+            })
+          );
         }
       });
     }
